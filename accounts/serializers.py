@@ -1,6 +1,6 @@
+from django.contrib.auth import authenticate
 from rest_framework import serializers
 from .models import User, UserProfile, UserHealthProfile, UserEnvironment
-
 
 class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
@@ -37,3 +37,22 @@ class SignupSerializer(serializers.ModelSerializer):
         UserEnvironment.objects.create(user=user)
 
         return user
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        email = data["email"]
+        password = data["password"]
+
+        user = authenticate(
+            username=email,
+            password=password
+        )
+
+        if user is None:
+            raise serializers.ValidationError("이메일 또는 비밀번호가 일치하지 않습니다.")
+
+        data["user"] = user
+        return data
