@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import User, UserProfile
-from .serializers import SignupSerializer, LoginSerializer, UserProfileSerializer
+from .serializers import SignupSerializer, LoginSerializer, UserProfileSerializer, UserProfileUpdateSerializer
 
 class SignupView(APIView):
     def post(self, request):
@@ -86,3 +86,56 @@ class UserProfileView(APIView):
 
         serializer = UserProfileSerializer(profile)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        try:
+            profile = UserProfile.objects.get(user=request.user)
+        except UserProfile.DoesNotExist:
+            return Response(
+                {
+                    "detail": "프로필이 존재하지 않습니다."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = UserProfileUpdateSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        user = request.user
+
+        if "nickname" in data:
+            user.nickname = data["nickname"]
+            user.save(update_fields=["nickname"])
+
+        if "cooking_level" in data:
+            profile.cooking_level = data["cooking_level"]
+
+        if "housing" in data:
+            profile.housing = data["housing"]
+
+        if "preference" in data:
+            profile.preference = ",".join(data["preference"])
+
+        profile.save()
+
+        return Response(
+            {
+                "message": "마이페이지 정보가 수정되었습니다.",
+                "profile": {
+                    "profile_id": profile.id,
+                    "user_id": user.id,
+                    "nickname": user.nickname,
+                    "cooking_level": profile.cooking_level,
+                    "housing": profile.housing,
+                    "preference": [
+                        item.strip()
+                        for item in profile.preference.split(",")
+                        if item.strip()
+                    ] if profile.preference else []
+                }
+            },
+            status=status.HTTP_200_OK
+        )

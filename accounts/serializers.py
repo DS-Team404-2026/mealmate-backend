@@ -78,3 +78,12 @@ class UserProfileSerializer(serializers.Serializer):
             for item in obj.preference.split(",")
             if item.strip()
         ]
+    
+class UserProfileUpdateSerializer(serializers.Serializer):
+    nickname = serializers.CharField(required=False, allow_blank=True)
+    cooking_level = serializers.IntegerField(required=False)
+    housing = serializers.CharField(required=False, allow_blank=True)
+    preference = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
