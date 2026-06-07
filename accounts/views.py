@@ -2,10 +2,11 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import User
-from .serializers import SignupSerializer, LoginSerializer
-
+from .models import User, UserProfile
+from .serializers import SignupSerializer, LoginSerializer, UserProfileSerializer
 
 class SignupView(APIView):
     def post(self, request):
@@ -67,3 +68,21 @@ class LoginView(APIView):
             },
             status=status.HTTP_401_UNAUTHORIZED
         )
+    
+class UserProfileView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            profile = UserProfile.objects.get(user=request.user)
+        except UserProfile.DoesNotExist:
+            return Response(
+                {
+                    "detail": "프로필이 존재하지 않습니다."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = UserProfileSerializer(profile)
+        return Response(serializer.data, status=status.HTTP_200_OK)

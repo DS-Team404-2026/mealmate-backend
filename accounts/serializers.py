@@ -56,3 +56,25 @@ class LoginSerializer(serializers.Serializer):
 
         data["user"] = user
         return data
+    
+class UserProfileSerializer(serializers.Serializer):
+    profile_id = serializers.IntegerField(source="id", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    nickname = serializers.CharField(source="user.nickname", read_only=True)
+    cooking_level = serializers.IntegerField(read_only=True)
+    housing = serializers.CharField(read_only=True)
+    preference = serializers.SerializerMethodField()
+
+    def get_preference(self, obj):
+        if not obj.preference:
+            return []
+
+        if isinstance(obj.preference, list):
+            return obj.preference
+
+        return [
+            item.strip()
+            for item in obj.preference.split(",")
+            if item.strip()
+        ]
