@@ -111,3 +111,24 @@ class UserHealthProfileSerializer(serializers.ModelSerializer):
             return round(obj.weight / (height_m ** 2), 1)
 
         return None
+    
+class UserHealthProfileUpdateSerializer(serializers.Serializer):
+    blood_pressure = serializers.CharField(required=False, allow_blank=True)
+
+    diseases = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
+
+    allergies = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
+
+    height = serializers.IntegerField(required=False, min_value=1)
+    weight = serializers.IntegerField(required=False, min_value=1)
+
+    diets = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )

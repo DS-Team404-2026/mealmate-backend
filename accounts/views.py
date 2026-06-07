@@ -6,7 +6,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import User, UserProfile, UserHealthProfile
-from .serializers import SignupSerializer, LoginSerializer, UserProfileSerializer, UserProfileUpdateSerializer, UserHealthProfileSerializer
+from .serializers import (
+    SignupSerializer,
+    LoginSerializer,
+    UserProfileSerializer,
+    UserProfileUpdateSerializer,
+    UserHealthProfileSerializer,
+    UserHealthProfileUpdateSerializer,
+)
 
 class SignupView(APIView):
     def post(self, request):
@@ -155,3 +162,51 @@ class UserHealthProfileView(APIView):
 
         serializer = UserHealthProfileSerializer(health_profile)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def patch(self, request):
+        try:
+            health_profile = UserHealthProfile.objects.get(user=request.user)
+        except UserHealthProfile.DoesNotExist:
+            return Response(
+                {"detail": "건강정보가 존재하지 않습니다."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = UserHealthProfileUpdateSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        if "blood_pressure" in data:
+            health_profile.blood_pressure = data["blood_pressure"]
+
+        if "diseases" in data:
+            health_profile.diseases = data["diseases"]
+
+        if "allergies" in data:
+            health_profile.allergies = data["allergies"]
+
+        if "height" in data:
+            health_profile.height = data["height"]
+
+        if "weight" in data:
+            health_profile.weight = data["weight"]
+
+        if "diets" in data:
+            health_profile.diets = data["diets"]
+
+        if health_profile.height and health_profile.weight:
+            height_m = health_profile.height / 100
+            health_profile.bmi = round(health_profile.weight / (height_m ** 2), 1)
+
+        health_profile.save()
+
+        return Response(
+            {
+                "message": "건강정보가 수정되었습니다.",
+                "health_profile": UserHealthProfileSerializer(health_profile).data
+            },
+            status=status.HTTP_200_OK
+        )
