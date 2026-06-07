@@ -87,3 +87,27 @@ class UserProfileUpdateSerializer(serializers.Serializer):
         child=serializers.CharField(),
         required=False
     )
+
+class UserHealthProfileSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    bmi = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserHealthProfile
+        fields = [
+            "user_id",
+            "height",
+            "weight",
+            "bmi",
+            "blood_pressure",
+            "diseases",
+            "allergies",
+            "diets",
+        ]
+
+    def get_bmi(self, obj):
+        if obj.height and obj.weight:
+            height_m = obj.height / 100
+            return round(obj.weight / (height_m ** 2), 1)
+
+        return None

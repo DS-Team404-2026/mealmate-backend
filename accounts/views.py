@@ -5,8 +5,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import User, UserProfile
-from .serializers import SignupSerializer, LoginSerializer, UserProfileSerializer, UserProfileUpdateSerializer
+from .models import User, UserProfile, UserHealthProfile
+from .serializers import SignupSerializer, LoginSerializer, UserProfileSerializer, UserProfileUpdateSerializer, UserHealthProfileSerializer
 
 class SignupView(APIView):
     def post(self, request):
@@ -139,3 +139,19 @@ class UserProfileView(APIView):
             },
             status=status.HTTP_200_OK
         )
+    
+class UserHealthProfileView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            health_profile = UserHealthProfile.objects.get(user=request.user)
+        except UserHealthProfile.DoesNotExist:
+            return Response(
+                {"detail": "건강정보가 존재하지 않습니다."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = UserHealthProfileSerializer(health_profile)
+        return Response(serializer.data, status=status.HTTP_200_OK)

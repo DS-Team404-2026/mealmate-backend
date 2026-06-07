@@ -23,7 +23,7 @@ class UserHealthProfile(models.Model):
     bmi = models.FloatField(null=True, blank=True)
     blood_pressure = models.CharField(max_length=50, null=True, blank=True)
     diseases = models.JSONField(default=list)
-    allergies = models.TextField(null=True, blank=True)
+    allergies = models.JSONField(default=list)
     diets = models.JSONField(default=list)
 
 # 4. 조리 환경 (엔티티 6~7번)
