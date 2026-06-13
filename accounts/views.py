@@ -5,7 +5,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import User, UserProfile, UserHealthProfile
+from .models import User, UserProfile, UserHealthProfile, UserEnvironment
 from .serializers import (
     SignupSerializer,
     LoginSerializer,
@@ -13,6 +13,7 @@ from .serializers import (
     UserProfileUpdateSerializer,
     UserHealthProfileSerializer,
     UserHealthProfileUpdateSerializer,
+    UserEnvironmentSerializer,
 )
 
 class SignupView(APIView):
@@ -31,6 +32,10 @@ class SignupView(APIView):
 
         if serializer.is_valid():
             user = serializer.save()
+
+            UserProfile.objects.get_or_create(user=user)
+            UserHealthProfile.objects.get_or_create(user=user)
+            UserEnvironment.objects.get_or_create(user=user)
 
             return Response(
                 {
@@ -210,3 +215,19 @@ class UserHealthProfileView(APIView):
             },
             status=status.HTTP_200_OK
         )
+    
+class UserEnvironmentView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            environment = UserEnvironment.objects.get(user=request.user)
+        except UserEnvironment.DoesNotExist:
+            return Response(
+                {"detail": "사용자 환경 정보가 존재하지 않습니다."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = UserEnvironmentSerializer(environment)
+        return Response(serializer.data, status=status.HTTP_200_OK)

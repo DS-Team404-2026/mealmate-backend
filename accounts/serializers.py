@@ -132,3 +132,16 @@ class UserHealthProfileUpdateSerializer(serializers.Serializer):
         child=serializers.CharField(),
         required=False
     )
+
+class UserEnvironmentSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+
+    class Meta:
+        model = UserEnvironment
+        fields = [
+            "user_id",
+            "induction",
+            "microwave",
+            "airfryer",
+            "blender",
+        ]
