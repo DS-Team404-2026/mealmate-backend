@@ -1,6 +1,6 @@
+from django.contrib.auth import authenticate
 from rest_framework import serializers
 from .models import User, UserProfile, UserHealthProfile, UserEnvironment
-
 
 class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
@@ -37,3 +37,117 @@ class SignupSerializer(serializers.ModelSerializer):
         UserEnvironment.objects.create(user=user)
 
         return user
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        email = data["email"]
+        password = data["password"]
+
+        user = authenticate(
+            username=email,
+            password=password
+        )
+
+        if user is None:
+            raise serializers.ValidationError("이메일 또는 비밀번호가 일치하지 않습니다.")
+
+        data["user"] = user
+        return data
+    
+class UserProfileSerializer(serializers.Serializer):
+    profile_id = serializers.IntegerField(source="id", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    nickname = serializers.CharField(source="user.nickname", read_only=True)
+    cooking_level = serializers.IntegerField(read_only=True)
+    housing = serializers.CharField(read_only=True)
+    preference = serializers.SerializerMethodField()
+
+    def get_preference(self, obj):
+        if not obj.preference:
+            return []
+
+        if isinstance(obj.preference, list):
+            return obj.preference
+
+        return [
+            item.strip()
+            for item in obj.preference.split(",")
+            if item.strip()
+        ]
+    
+class UserProfileUpdateSerializer(serializers.Serializer):
+    nickname = serializers.CharField(required=False, allow_blank=True)
+    cooking_level = serializers.IntegerField(required=False)
+    housing = serializers.CharField(required=False, allow_blank=True)
+    preference = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
+
+class UserHealthProfileSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    bmi = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserHealthProfile
+        fields = [
+            "user_id",
+            "height",
+            "weight",
+            "bmi",
+            "blood_pressure",
+            "diseases",
+            "allergies",
+            "diets",
+        ]
+
+    def get_bmi(self, obj):
+        if obj.height and obj.weight:
+            height_m = obj.height / 100
+            return round(obj.weight / (height_m ** 2), 1)
+
+        return None
+    
+class UserHealthProfileUpdateSerializer(serializers.Serializer):
+    blood_pressure = serializers.CharField(required=False, allow_blank=True)
+
+    diseases = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
+
+    allergies = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
+
+    height = serializers.IntegerField(required=False, min_value=1)
+    weight = serializers.IntegerField(required=False, min_value=1)
+
+    diets = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
+
+class UserEnvironmentSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+
+    class Meta:
+        model = UserEnvironment
+        fields = [
+            "user_id",
+            "induction",
+            "microwave",
+            "airfryer",
+            "blender",
+        ]
+
+class UserEnvironmentUpdateSerializer(serializers.Serializer):
+    induction = serializers.BooleanField(required=False)
+    microwave = serializers.BooleanField(required=False)
+    airfryer = serializers.BooleanField(required=False)
+    blender = serializers.BooleanField(required=False)
