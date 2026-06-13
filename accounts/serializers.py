@@ -145,3 +145,9 @@ class UserEnvironmentSerializer(serializers.ModelSerializer):
             "airfryer",
             "blender",
         ]
+
+class UserEnvironmentUpdateSerializer(serializers.Serializer):
+    induction = serializers.BooleanField(required=False)
+    microwave = serializers.BooleanField(required=False)
+    airfryer = serializers.BooleanField(required=False)
+    blender = serializers.BooleanField(required=False)

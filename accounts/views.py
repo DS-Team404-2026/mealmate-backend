@@ -14,6 +14,7 @@ from .serializers import (
     UserHealthProfileSerializer,
     UserHealthProfileUpdateSerializer,
     UserEnvironmentSerializer,
+    UserEnvironmentUpdateSerializer,
 )
 
 class SignupView(APIView):
@@ -231,3 +232,41 @@ class UserEnvironmentView(APIView):
 
         serializer = UserEnvironmentSerializer(environment)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        try:
+            environment = UserEnvironment.objects.get(user=request.user)
+        except UserEnvironment.DoesNotExist:
+            return Response(
+                {"detail": "사용자 환경 정보가 존재하지 않습니다."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = UserEnvironmentUpdateSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        if "induction" in data:
+            environment.induction = data["induction"]
+
+        if "microwave" in data:
+            environment.microwave = data["microwave"]
+
+        if "airfryer" in data:
+            environment.airfryer = data["airfryer"]
+
+        if "blender" in data:
+            environment.blender = data["blender"]
+
+        environment.save()
+
+        return Response(
+            {
+                "message": "사용자 환경 정보가 수정되었습니다.",
+                "environment": UserEnvironmentSerializer(environment).data
+            },
+            status=status.HTTP_200_OK
+        )
