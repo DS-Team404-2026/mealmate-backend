@@ -38,7 +38,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "rest_framework",
+    "accounts",
     "ingredients",
+    "recipes",
+    "analytics",
 ]
 
 MIDDLEWARE = [
@@ -128,3 +131,5 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 PUBLIC_DATA_API_KEY = "CnExhGo9IUhJGrXToobugXpthP0341SmRRjKtPCXLfaBnAj5i4N/zO01+QkQBd9Xernv0H/hRkZaigEcn5OrxQ=="
+
+AUTH_USER_MODEL = 'accounts.User'
