@@ -3,7 +3,7 @@ from .models import Recipe
 
 def fetch_and_save_public_recipes():
     # 식약처 조리식품 레시피 오픈 API 주소 (샘플 인증키인 'sample'을 사용해 테스트)
-    # 실제 발급받은 인증키가 있다면 'sample' 자리에 팀원분의 인증키를 넣으시면 됩니다.
+    # 실제 발급받은 인증키가 있다면 'sample' 자리에 팀원분의 인증키를 넣기
     api_key = "sample" 
     url = f"http://openapi.foodsafetykorea.go.kr/api/{api_key}/COOKRCP01/json/1/50" # 우선 50개만 테스트
 
