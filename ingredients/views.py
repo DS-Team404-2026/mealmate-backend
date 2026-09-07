@@ -1,12 +1,16 @@
 from datetime import date, timedelta
 
+from django.db import DatabaseError, transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import Ingredients, UserRefrigerators, Users
-from .serializers import IngredientSerializer, UserRefrigeratorSerializer
-from .services import search_raw_material
+from .serializers import IngredientSerializer, IngredientValidationSerializer, ReceiptImageSerializer, UserRefrigeratorSerializer
+from .services import ClovaOCRError, IngredientNormalizationError, normalize_ingredient_names, parse_receipt_text, recognize_receipt, search_raw_material
 
 
 class IngredientViewSet(viewsets.ModelViewSet):
@@ -25,6 +29,129 @@ class IngredientViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(category=category)
 
         return queryset
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="receipt-recognize",
+        parser_classes=[MultiPartParser],
+        authentication_classes=[JWTAuthentication],
+        permission_classes=[IsAuthenticated],
+    )
+    def receipt_recognize(self, request):
+        serializer = ReceiptImageSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response({
+                "success": False,
+                "message": "영수증 이미지를 첨부해주세요."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        image = serializer.validated_data["image"]
+
+        try:
+            ocr_text = recognize_receipt(image)
+        except ClovaOCRError as error:
+            return Response({
+                "success": False,
+                "message": str(error),
+            }, status=status.HTTP_502_BAD_GATEWAY)
+
+        receipt_data = parse_receipt_text(ocr_text)
+
+        return Response({
+            "success": True,
+            "purchase_date": receipt_data["purchase_date"],
+            "results": receipt_data["results"],
+        }, status=status.HTTP_200_OK)
+
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="validate",
+        authentication_classes=[JWTAuthentication],
+        permission_classes=[IsAuthenticated],
+    )
+    def validate_ingredients(self, request):
+        serializer = IngredientValidationSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "확정할 식재료 목록을 올바르게 입력해주세요.",
+                "errors": serializer.errors,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        confirmed_items = serializer.validated_data[
+            "user_confirmed_ingredients"
+        ]
+
+        ingredient_names = [
+            item["ingredient_name"]
+            for item in confirmed_items
+        ]
+
+        try:
+            normalized_names = normalize_ingredient_names(
+                ingredient_names
+            )
+        except IngredientNormalizationError as error:
+            return Response({
+                "status": "error",
+                "message": str(error),
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        try:
+            with transaction.atomic():
+                saved_ingredients = []
+
+                for item, normalized_name in zip(
+                    confirmed_items,
+                    normalized_names,
+                ):
+                    ingredient_name = normalized_name[:20]
+
+                    ingredient = Ingredients.objects.filter(
+                        name=ingredient_name
+                    ).first()
+
+                    if ingredient is None:
+                        ingredient = Ingredients.objects.create(
+                            name=ingredient_name,
+                            category=None,
+                            unit=item["unit"],
+                            amount=0,
+                        )
+
+                    UserRefrigerators.objects.create(
+                        user_id=request.user.pk,
+                        ingredient=ingredient,
+                        quantity=item["quantity"],
+                        expired_at=None,
+                        storage_type=None,
+                    )
+
+                    saved_ingredients.append(ingredient.name)
+
+        except DatabaseError:
+            return Response({
+                "status": "error",
+                "message": "냉장고 DB 저장에 실패했습니다.",
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        return Response({
+            "status": "success",
+            "message": (
+                "식재료가 표준화되어 냉장고에 "
+                "성공적으로 저장되었습니다."
+            ),
+            "data": {
+                "saved_ingredients": saved_ingredients,
+                "normalized_count": len(saved_ingredients),
+            },
+        }, status=status.HTTP_200_OK)
+
 
     @action(detail=False, methods=["get"])
     def raw_materials(self, request):
