@@ -1,6 +1,6 @@
 from django.db import models
 from accounts.models import User
-from ingredients.models import Ingredient
+from ingredients.models import Ingredients as Ingredient
 
 # 1. 레시피 기본 정보 (엔티티 13번)
 class Recipe(models.Model):
