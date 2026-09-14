@@ -29,4 +29,7 @@ urlpatterns = [
 
     # 식재료 API
     path("api/v1/", include("ingredients.urls")),
+    
+    # 레시피 API 
+    path('api/v1/recipes/', include('recipes.urls')), 
 ]
