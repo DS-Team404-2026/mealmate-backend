@@ -87,14 +87,24 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         "ENGINE": "django.db.backends.mysql",
+#         "NAME": "recipe_app",
+#         "USER": "root",
+#         "PASSWORD": os.getenv("DB_PASSWORD", ""),
+#         "HOST": "127.0.0.1",
+#         "PORT": "3306",
+#     }
+# }
 DATABASES = {
-    'default': {
+    "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "recipe_app",
-        "USER": "root",
+        "NAME": os.getenv("DB_NAME", "refridge_db"),
+        "USER": os.getenv("DB_USER", "root"),
         "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": "127.0.0.1",
-        "PORT": "3306",
+        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+        "PORT": os.getenv("DB_PORT", "3306"),
     }
 }
 
