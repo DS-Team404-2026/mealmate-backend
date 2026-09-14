@@ -1,5 +1,10 @@
-django
+Django==5.2.6
 djangorestframework
-requests
-openai
+djangorestframework-simplejwt
+requests==2.34.2
+mysqlclient==2.2.8
+Pillow==12.3.0
+python-dotenv==1.2.3
+openai==3.8.0
+pydantic==2.13.5
 chromadb
