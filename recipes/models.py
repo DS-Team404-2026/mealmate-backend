@@ -1,6 +1,6 @@
 from django.db import models
 from accounts.models import User
-from ingredients.models import Ingredient
+from ingredients.models import Ingredients as Ingredient
 
 # 1. 레시피 기본 정보 (엔티티 13번)
 class Recipe(models.Model):
@@ -11,6 +11,7 @@ class Recipe(models.Model):
     protein = models.FloatField()
     carbs = models.FloatField()
     fat = models.FloatField()
+    ingredient_lines = models.TextField(null=True, blank=True) # 식약처 통짜 재료 텍스트 저장용
 
 # 2. 조리 단계 (엔티티 14번)
 class RecipeStep(models.Model):

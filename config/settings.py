@@ -10,11 +10,21 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / ".env")
+
+CLOVA_OCR_INVOKE_URL = os.getenv("CLOVA_OCR_INVOKE_URL", "")
+CLOVA_OCR_SECRET_KEY = os.getenv("CLOVA_OCR_SECRET_KEY", "")
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -38,7 +48,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "rest_framework",
+    "accounts",
     "ingredients",
+    "recipes",
+    "analytics",
 ]
 
 MIDDLEWARE = [
@@ -74,14 +87,24 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         "ENGINE": "django.db.backends.mysql",
+#         "NAME": "recipe_app",
+#         "USER": "root",
+#         "PASSWORD": os.getenv("DB_PASSWORD", ""),
+#         "HOST": "127.0.0.1",
+#         "PORT": "3306",
+#     }
+# }
 DATABASES = {
-    'default': {
+    "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "recipe_app",
-        "USER": "root",
-        "PASSWORD": "root1234",
-        "HOST": "127.0.0.1",
-        "PORT": "3306",
+        "NAME": os.getenv("DB_NAME", "refridge_db"),
+        "USER": os.getenv("DB_USER", "root"),
+        "PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+        "PORT": os.getenv("DB_PORT", "3306"),
     }
 }
 
@@ -128,3 +151,5 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 PUBLIC_DATA_API_KEY = "CnExhGo9IUhJGrXToobugXpthP0341SmRRjKtPCXLfaBnAj5i4N/zO01+QkQBd9Xernv0H/hRkZaigEcn5OrxQ=="
+
+AUTH_USER_MODEL = 'accounts.User'

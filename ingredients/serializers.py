@@ -3,6 +3,30 @@ from rest_framework import serializers
 
 from .models import Ingredients, UserRefrigerators
 
+class ReceiptImageSerializer(serializers.Serializer):
+    image = serializers.ImageField()
+
+
+class ConfirmedIngredientSerializer(serializers.Serializer):
+    ingredient_name = serializers.CharField(
+        max_length=50,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    quantity = serializers.IntegerField(min_value=1)
+    unit = serializers.CharField(
+        max_length=20,
+        required=False,
+        default="개",
+    )
+
+
+class IngredientValidationSerializer(serializers.Serializer):
+    user_confirmed_ingredients = ConfirmedIngredientSerializer(
+        many=True,
+        allow_empty=False,
+    )
+
 
 class IngredientSerializer(serializers.ModelSerializer):
     class Meta:

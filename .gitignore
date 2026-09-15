@@ -1,14 +1,21 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
+# Database
 db.sqlite3
+
+# Environment Variables (보안 파일)
 .env
 
-venv/
-.venv/
-
+# OS Files
 .DS_Store
 
 # AI model weights
