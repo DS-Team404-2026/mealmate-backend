@@ -1,4 +1,5 @@
 import os
+import re  # 🚨 텍스트에서 한글 재료명만 뽑아내기 위해 꼭 필요해!
 import numpy as np
 from openai import OpenAI
 from sklearn.metrics.pairwise import cosine_similarity
@@ -7,7 +8,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
-# 🚨 에러 원인이었던 UserTasteProfile 제거하고 필요한 모델들만 정확히 import!
 from .models import Recipe, RecipeRecommendation, RecipeBook, RecipeFeedback
 
 # ---------------------------------------------------------
@@ -37,7 +37,14 @@ class RecipeRecommendationView(APIView):
         if not all_recipes.exists():
             return Response({"message": "추천 후보 레시피가 DB에 없습니다."}, status=status.HTTP_404_NOT_FOUND)
 
-        vocab = list(set([ing for recipe in all_recipes for ing in getattr(recipe, 'ingredients_list', [])] + clean_ingredients))
+        # 🚨 [수정됨] DB의 통짜 텍스트(ingredient_lines)에서 한글 재료 단어만 쏙쏙 뽑아 모으기!
+        all_recipe_ingredients = []
+        for recipe in all_recipes:
+            raw_text = getattr(recipe, 'ingredient_lines', '')
+            words = re.findall(r'[가-힣]{2,}', raw_text)
+            all_recipe_ingredients.extend(words)
+
+        vocab = list(set(all_recipe_ingredients + clean_ingredients))
         vocab_dim = len(vocab)
 
         if vocab_dim == 0:
@@ -51,7 +58,10 @@ class RecipeRecommendationView(APIView):
         recommendation_list = []
 
         for recipe in all_recipes:
-            recipe_ingredients = getattr(recipe, 'ingredients_list', [])
+            # 🚨 [수정됨] 추천 돌릴 때도 똑같이 텍스트에서 한글 단어만 뽑아줌
+            raw_text = getattr(recipe, 'ingredient_lines', '')
+            recipe_ingredients = list(set(re.findall(r'[가-힣]{2,}', raw_text)))
+
             if not recipe_ingredients:
                 continue
 
@@ -64,7 +74,6 @@ class RecipeRecommendationView(APIView):
             matched_count = len(set(clean_ingredients) & set(recipe_ingredients))
             match_weight = matched_count / len(recipe_ingredients) if recipe_ingredients else 0
             
-            # 🚨 에러 원인이었던 UserTasteProfile 대신 기본 가중치 1.0으로 안전하게 처리
             taste_weight = 1.0 
 
             total_score = (cos_sim * 0.4) + (match_weight * 0.4) + (taste_weight * 0.2)
@@ -114,7 +123,7 @@ class RecipeRecommendationView(APIView):
         }, status=status.HTTP_200_OK)
 
 # ---------------------------------------------------------
-# 2. 북마크 목록 조회 뷰 (누락되었던 부분)
+# 2. 북마크 목록 조회 뷰
 # ---------------------------------------------------------
 class UserBookmarkListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -138,7 +147,7 @@ class UserBookmarkListView(APIView):
         }, status=status.HTTP_200_OK)
 
 # ---------------------------------------------------------
-# 3. 레시피 후기/피드백 등록 뷰 (누락되었던 부분)
+# 3. 레시피 후기/피드백 등록 뷰
 # ---------------------------------------------------------
 class RecipeFeedbackCreateView(APIView):
     def post(self, request):
