@@ -1,16 +1,32 @@
 from datetime import date, timedelta
 
+import cv2
+import numpy as np
+
 from django.db import DatabaseError, transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import Ingredients, UserRefrigerators, Users
-from .serializers import IngredientSerializer, IngredientValidationSerializer, ReceiptImageSerializer, UserRefrigeratorSerializer
-from .services import ClovaOCRError, IngredientNormalizationError, normalize_ingredient_names, parse_receipt_text, recognize_receipt, search_raw_material
+from .serializers import (
+    IngredientSerializer,
+    IngredientValidationSerializer,
+    ReceiptImageSerializer,
+    UserRefrigeratorSerializer,
+)
+from .services import (
+    ClovaOCRError,
+    IngredientNormalizationError,
+    normalize_ingredient_names,
+    parse_receipt_text,
+    recognize_receipt,
+    search_raw_material,
+)
+from .ai.ingredient_detector import get_detector
 
 
 class IngredientViewSet(viewsets.ModelViewSet):
@@ -64,7 +80,6 @@ class IngredientViewSet(viewsets.ModelViewSet):
             "purchase_date": receipt_data["purchase_date"],
             "results": receipt_data["results"],
         }, status=status.HTTP_200_OK)
-
 
     @action(
         detail=False,
@@ -152,7 +167,6 @@ class IngredientViewSet(viewsets.ModelViewSet):
             },
         }, status=status.HTTP_200_OK)
 
-
     @action(detail=False, methods=["get"])
     def raw_materials(self, request):
         keyword = request.query_params.get("keyword")
@@ -194,8 +208,99 @@ class IngredientViewSet(viewsets.ModelViewSet):
             "name": ingredient.name,
             "category": ingredient.category,
             "unit": ingredient.unit,
-            "message": "식재료가 저장되었습니다." if created else "이미 존재하는 식재료입니다."
-        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+            "message": (
+                "식재료가 저장되었습니다."
+                if created
+                else "이미 존재하는 식재료입니다."
+            )
+        }, status=(
+            status.HTTP_201_CREATED
+            if created
+            else status.HTTP_200_OK
+        ))
+
+    # 냉장고 이미지 기반 식재료 자동 인식
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="recognize",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def recognize(self, request):
+        image = request.FILES.get("image")
+
+        if not image:
+            return Response({
+                "success": False,
+                "message": "image 파일이 필요합니다."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Django UploadedFile -> bytes
+            image_bytes = image.read()
+
+            # bytes -> numpy array
+            np_array = np.frombuffer(
+                image_bytes,
+                dtype=np.uint8
+            )
+
+            # numpy array -> OpenCV 이미지
+            cv_image = cv2.imdecode(
+                np_array,
+                cv2.IMREAD_COLOR
+            )
+
+            if cv_image is None:
+                return Response({
+                    "success": False,
+                    "message": "이미지 파일을 읽을 수 없습니다."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # YOLO 모델 로드 및 추론
+            detector = get_detector()
+
+            detections = detector.predict(
+                cv_image
+            )
+
+        except Exception as error:
+            return Response({
+                "success": False,
+                "message": "식재료 이미지 분석 중 오류가 발생했습니다.",
+                "error": str(error),
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        results = []
+
+        for detection in detections:
+            display_name = detection["display_name"]
+
+            # 인식된 식재료를 기존 DB와 매칭
+            ingredient = (
+                Ingredients.objects
+                .filter(name__iexact=display_name)
+                .first()
+            )
+
+            results.append({
+                "label": detection["label"],
+                "display_name": display_name,
+                "confidence": detection["confidence"],
+                "bbox": detection["bbox"],
+                "ingredient_id": (
+                    ingredient.id
+                    if ingredient
+                    else None
+                ),
+                "registered": ingredient is not None,
+            })
+
+        return Response({
+            "success": True,
+            "count": len(results),
+            "results": results,
+        }, status=status.HTTP_200_OK)
 
 
 class UserRefrigeratorViewSet(viewsets.ModelViewSet):
@@ -204,22 +309,31 @@ class UserRefrigeratorViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user_id = self.request.query_params.get("user_id", 1)
 
-        queryset = UserRefrigerators.objects.select_related("ingredient").filter(
-            user_id=user_id
-        ).order_by("expired_at")
+        queryset = (
+            UserRefrigerators.objects
+            .select_related("ingredient")
+            .filter(user_id=user_id)
+            .order_by("expired_at")
+        )
 
         category = self.request.query_params.get("category")
         storage_type = self.request.query_params.get("storage_type")
         expiry_status = self.request.query_params.get("expiry_status")
 
         if category:
-            queryset = queryset.filter(ingredient__category=category)
+            queryset = queryset.filter(
+                ingredient__category=category
+            )
 
         if storage_type:
-            queryset = queryset.filter(storage_type=storage_type)
+            queryset = queryset.filter(
+                storage_type=storage_type
+            )
 
         if expiry_status == "expired":
-            queryset = queryset.filter(expired_at__lt=date.today())
+            queryset = queryset.filter(
+                expired_at__lt=date.today()
+            )
 
         if expiry_status == "soon":
             queryset = queryset.filter(
@@ -242,16 +356,23 @@ class UserRefrigeratorViewSet(viewsets.ModelViewSet):
         today = date.today()
         target_date = today + timedelta(days=days)
 
-        items = UserRefrigerators.objects.select_related("ingredient").filter(
-            user_id=user_id,
-            expired_at__gte=today,
-            expired_at__lte=target_date,
-        ).order_by("expired_at")
+        items = (
+            UserRefrigerators.objects
+            .select_related("ingredient")
+            .filter(
+                user_id=user_id,
+                expired_at__gte=today,
+                expired_at__lte=target_date,
+            )
+            .order_by("expired_at")
+        )
 
         data = []
 
         for item in items:
-            days_left = (item.expired_at - today).days
+            days_left = (
+                item.expired_at - today
+            ).days
 
             data.append({
                 "id": item.id,
@@ -263,7 +384,10 @@ class UserRefrigeratorViewSet(viewsets.ModelViewSet):
                 "storage_type": item.storage_type,
                 "expired_at": item.expired_at,
                 "days_left": days_left,
-                "message": f"{item.ingredient.name}의 유통기한이 {days_left}일 남았습니다."
+                "message": (
+                    f"{item.ingredient.name}의 유통기한이 "
+                    f"{days_left}일 남았습니다."
+                )
             })
 
         return Response({

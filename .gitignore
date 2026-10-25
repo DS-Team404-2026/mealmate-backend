@@ -17,3 +17,6 @@ db.sqlite3
 
 # OS Files
 .DS_Store
+
+# AI model weights
+*.pt
