@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 from django.db import DatabaseError, transaction
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -27,6 +28,25 @@ from .services import (
     search_raw_material,
 )
 from .ai.ingredient_detector import get_detector
+
+
+def resolve_legacy_user(auth_user):
+    """임시 호환 계층: JWT 계정과 기존 users 테이블을 이메일로 연결.
+
+    운영 환경에서는 검증된 명시적 계정 연결 또는 인증 모델 통합이 필요하다.
+    """
+    email = (auth_user.email or "").strip()
+    if not email:
+        raise PermissionDenied("로그인 계정에 이메일이 없습니다.")
+    try:
+        return Users.objects.get(email=email)
+    except Users.DoesNotExist:
+        raise PermissionDenied(
+            "기존 users 테이블에 연결된 계정이 없습니다. "
+            "관리자에게 계정 연결을 요청해주세요."
+        )
+    except Users.MultipleObjectsReturned:
+        raise PermissionDenied("중복 사용자 이메일이 있어 계정을 연결할 수 없습니다.")
 
 
 class IngredientViewSet(viewsets.ModelViewSet):
@@ -117,6 +137,10 @@ class IngredientViewSet(viewsets.ModelViewSet):
                 "message": str(error),
             }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
+        # 로그인 계정과 기존 users 테이블을 이메일로 매칭한다.
+        # ID를 직접 재사용하면 다른 사람의 냉장고에 저장될 수 있다.
+        legacy_user = resolve_legacy_user(request.user)
+
         try:
             with transaction.atomic():
                 saved_ingredients = []
@@ -139,8 +163,11 @@ class IngredientViewSet(viewsets.ModelViewSet):
                             amount=0,
                         )
 
+                    legacy_user = Users.objects.filter(email=request.user.email).first()
+                    if legacy_user is None:
+                        raise PermissionDenied("기존 users 계정 연결이 필요합니다.")
                     UserRefrigerators.objects.create(
-                        user_id=request.user.pk,
+                        user=legacy_user,
                         ingredient=ingredient,
                         quantity=item["quantity"],
                         expired_at=None,
@@ -305,75 +332,54 @@ class IngredientViewSet(viewsets.ModelViewSet):
 
 class UserRefrigeratorViewSet(viewsets.ModelViewSet):
     serializer_class = UserRefrigeratorSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _legacy_user(self):
+        return resolve_legacy_user(self.request.user)
 
     def get_queryset(self):
-        user_id = self.request.query_params.get("user_id", 1)
-
         queryset = (
             UserRefrigerators.objects
             .select_related("ingredient")
-            .filter(user_id=user_id)
-            .order_by("expired_at")
+            .filter(user=self._legacy_user())
+            .order_by("expired_at", "id")
         )
-
         category = self.request.query_params.get("category")
         storage_type = self.request.query_params.get("storage_type")
         expiry_status = self.request.query_params.get("expiry_status")
-
         if category:
-            queryset = queryset.filter(
-                ingredient__category=category
-            )
-
+            queryset = queryset.filter(ingredient__category=category)
         if storage_type:
-            queryset = queryset.filter(
-                storage_type=storage_type
-            )
-
+            queryset = queryset.filter(storage_type=storage_type)
         if expiry_status == "expired":
-            queryset = queryset.filter(
-                expired_at__lt=date.today()
-            )
-
-        if expiry_status == "soon":
+            queryset = queryset.filter(expired_at__lt=date.today())
+        elif expiry_status == "soon":
             queryset = queryset.filter(
                 expired_at__gte=date.today(),
-                expired_at__lte=date.today() + timedelta(days=3)
+                expired_at__lte=date.today() + timedelta(days=3),
             )
-
         return queryset
 
     def perform_create(self, serializer):
-        user_id = self.request.data.get("user", 1)
-        user = Users.objects.get(id=user_id)
-        serializer.save(user=user)
+        serializer.save(user=self._legacy_user())
 
     @action(detail=False, methods=["get"])
     def expiring(self, request):
-        user_id = request.query_params.get("user_id", 1)
-        days = int(request.query_params.get("days", 3))
-
+        try:
+            days = int(request.query_params.get("days", 3))
+        except (TypeError, ValueError):
+            raise ValidationError({"days": "정수를 입력해주세요."})
+        if days < 0:
+            raise ValidationError({"days": "0 이상의 정수를 입력해주세요."})
         today = date.today()
-        target_date = today + timedelta(days=days)
-
-        items = (
-            UserRefrigerators.objects
-            .select_related("ingredient")
-            .filter(
-                user_id=user_id,
-                expired_at__gte=today,
-                expired_at__lte=target_date,
-            )
-            .order_by("expired_at")
+        items = self.get_queryset().filter(
+            expired_at__gte=today,
+            expired_at__lte=today + timedelta(days=days),
         )
-
         data = []
-
         for item in items:
-            days_left = (
-                item.expired_at - today
-            ).days
-
+            days_left = (item.expired_at - today).days
             data.append({
                 "id": item.id,
                 "ingredient_id": item.ingredient.id,
@@ -384,14 +390,6 @@ class UserRefrigeratorViewSet(viewsets.ModelViewSet):
                 "storage_type": item.storage_type,
                 "expired_at": item.expired_at,
                 "days_left": days_left,
-                "message": (
-                    f"{item.ingredient.name}의 유통기한이 "
-                    f"{days_left}일 남았습니다."
-                )
+                "message": f"{item.ingredient.name}의 유통기한이 {days_left}일 남았습니다.",
             })
-
-        return Response({
-            "success": True,
-            "count": len(data),
-            "results": data,
-        })
+        return Response({"success": True, "count": len(data), "results": data})

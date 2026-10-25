@@ -52,6 +52,7 @@ class UserRefrigeratorSerializer(serializers.ModelSerializer):
             "ingredient_category",
             "ingredient_unit",
         ]
+        read_only_fields = ["id", "user"]
 
     def validate_quantity(self, value):
         if value is not None and value <= 0:
