@@ -14,6 +14,10 @@ from .models import Recipe, RecipeRecommendation, RecipeBook, RecipeFeedback
 # 1. AI 하이브리드 추천 뷰
 # ---------------------------------------------------------
 class RecipeRecommendationView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    
     def post(self, request):
         raw_ingredients = request.data.get('available_ingredients', [])
         
