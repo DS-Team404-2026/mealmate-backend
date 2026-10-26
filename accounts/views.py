@@ -1,4 +1,5 @@
 from rest_framework import status
+from django.db import transaction
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -6,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import User, UserProfile, UserHealthProfile, UserEnvironment
+from ingredients.legacy_users import resolve_legacy_user
 from .serializers import (
     SignupSerializer,
     LoginSerializer,
@@ -32,11 +34,13 @@ class SignupView(APIView):
         serializer = SignupSerializer(data=request.data)
 
         if serializer.is_valid():
-            user = serializer.save()
-
-            UserProfile.objects.get_or_create(user=user)
-            UserHealthProfile.objects.get_or_create(user=user)
-            UserEnvironment.objects.get_or_create(user=user)
+            # 회원가입과 레거시 users 계정 생성을 하나의 트랜잭션으로 처리
+            with transaction.atomic():
+                user = serializer.save()
+                UserProfile.objects.get_or_create(user=user)
+                UserHealthProfile.objects.get_or_create(user=user)
+                UserEnvironment.objects.get_or_create(user=user)
+                resolve_legacy_user(user)
 
             return Response(
                 {
