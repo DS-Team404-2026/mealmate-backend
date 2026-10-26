@@ -23,7 +23,14 @@
 # ]
 
 from django.urls import path
-from .views import RecipeRecommendationView, UserBookmarkListView, RecipeFeedbackCreateView
+from .views import(
+    RecipeRecommendationView, 
+    UserBookmarkListView, 
+    RecipeFeedbackCreateView,
+    RecipeDetailView,
+    RecipeStepView
+)
+
 
 urlpatterns = [
     # 1. AI 레시피 추천 (명세서: /api/v1/recipe-recommendations/)
@@ -34,5 +41,11 @@ urlpatterns = [
     
     # 3. 저장한 레시피 목록 조회 (명세서: /api/recipes/saved/ -> 팀원과 합의 후 v1을 넣기로 했다면 recipes/saved/ 로 쓴다)
     # 만약 최상위에 /api/v1/이 걸려있다면 path('recipes/saved/', ...) 형태로 맞춰주면 됨.
-    path('recipes/saved/', UserBookmarkListView.as_view(), name='user-bookmarks'),
+    path('recipe-books/', UserBookmarkListView.as_view(), name='recipe-books'),
+
+    # 4. 레시피 상세 조회 (명세서: /api/v1/recipes/{id}/)
+    path('recipes/<int:pk>/', RecipeDetailView.as_view(), name='recipe-detail'),
+
+    # 5. 조리 단계 조회 (명세서: /api/v1/recipes/{id}/steps/)
+    path('recipes/<int:pk>/steps/', RecipeStepView.as_view(), name='recipe-steps'),
 ]

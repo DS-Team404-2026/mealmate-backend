@@ -158,6 +158,33 @@ class UserBookmarkListView(APIView):
             "bookmarks": bookmark_list
         }, status=status.HTTP_200_OK)
 
+
+
+    # 🚨 [추가] POST (레시피 저장/평가)
+    def post(self, request):
+        recipe_id = request.data.get('recipe_id')
+        preference = request.data.get('preference', '')
+        is_favorite = request.data.get('is_favorite', True)
+
+        if not recipe_id:
+            return Response({"message": "recipe_id가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            recipe = Recipe.objects.get(id=recipe_id)
+        except Recipe.DoesNotExist:
+            return Response({"message": "해당 레시피가 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+        bookmark, created = RecipeBook.objects.update_or_create(
+            user=request.user,
+            recipe=recipe,
+            defaults={
+                'preference': preference,
+                'is_favorite': is_favorite
+            }
+        )
+        msg = "북마크 저장 완료" if created else "북마크 수정 완료"
+        return Response({"status": "success", "message": msg}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
 # ---------------------------------------------------------
 # 3. 레시피 후기/피드백 등록 뷰
 # ---------------------------------------------------------
@@ -187,3 +214,40 @@ class RecipeFeedbackCreateView(APIView):
 
         msg = "등록 성공" if created else "수정 성공"
         return Response({"status": "success", "message": msg}, status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED)
+
+
+
+
+    # ---------------------------------------------------------
+# 4. 레시피 상세 조회 뷰 (GET /api/v1/recipes/{id}/)
+# ---------------------------------------------------------
+class RecipeDetailView(APIView):
+    def get(self, request, pk):
+        try:
+            recipe = Recipe.objects.get(pk=pk)
+            return Response({
+                "id": recipe.id,
+                "title": recipe.title,
+                "ingredient_lines": getattr(recipe, 'ingredient_lines', ''),
+                "difficulty": getattr(recipe, 'difficulty', '중'),
+                "cooking_time": getattr(recipe, 'cooking_time', 30),
+                "calories": getattr(recipe, 'calories', 500),
+            }, status=status.HTTP_200_OK)
+        except Recipe.DoesNotExist:
+            return Response({"message": "해당 레시피를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+# ---------------------------------------------------------
+# 5. 조리 단계 조회 뷰 (GET /api/v1/recipes/{id}/steps/)
+# ---------------------------------------------------------
+class RecipeStepView(APIView):
+    def get(self, request, pk):
+        try:
+            recipe = Recipe.objects.get(pk=pk)
+            # Recipe 모델에 조리 단계 필드명(instructions 또는 steps)에 맞춰 불러옴
+            steps = getattr(recipe, 'instructions', getattr(recipe, 'steps', '조리 단계 정보가 없습니다.'))
+            return Response({
+                "recipe_id": recipe.id,
+                "steps": steps
+            }, status=status.HTTP_200_OK)
+        except Recipe.DoesNotExist:
+            return Response({"message": "해당 레시피를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
