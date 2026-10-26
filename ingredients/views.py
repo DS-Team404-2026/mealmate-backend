@@ -12,7 +12,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import Ingredients, UserRefrigerators, Users
+from .models import Ingredients, UserRefrigerators
 from .serializers import (
     IngredientSerializer,
     IngredientValidationSerializer,
@@ -28,25 +28,7 @@ from .services import (
     search_raw_material,
 )
 from .ai.ingredient_detector import get_detector
-
-
-def resolve_legacy_user(auth_user):
-    """임시 호환 계층: JWT 계정과 기존 users 테이블을 이메일로 연결.
-
-    운영 환경에서는 검증된 명시적 계정 연결 또는 인증 모델 통합이 필요하다.
-    """
-    email = (auth_user.email or "").strip()
-    if not email:
-        raise PermissionDenied("로그인 계정에 이메일이 없습니다.")
-    try:
-        return Users.objects.get(email=email)
-    except Users.DoesNotExist:
-        raise PermissionDenied(
-            "기존 users 테이블에 연결된 계정이 없습니다. "
-            "관리자에게 계정 연결을 요청해주세요."
-        )
-    except Users.MultipleObjectsReturned:
-        raise PermissionDenied("중복 사용자 이메일이 있어 계정을 연결할 수 없습니다.")
+from .legacy_users import resolve_legacy_user
 
 
 class IngredientViewSet(viewsets.ModelViewSet):
@@ -163,9 +145,6 @@ class IngredientViewSet(viewsets.ModelViewSet):
                             amount=0,
                         )
 
-                    legacy_user = Users.objects.filter(email=request.user.email).first()
-                    if legacy_user is None:
-                        raise PermissionDenied("기존 users 계정 연결이 필요합니다.")
                     UserRefrigerators.objects.create(
                         user=legacy_user,
                         ingredient=ingredient,
