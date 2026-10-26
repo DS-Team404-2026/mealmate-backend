@@ -159,3 +159,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 PUBLIC_DATA_API_KEY = "CnExhGo9IUhJGrXToobugXpthP0341SmRRjKtPCXLfaBnAj5i4N/zO01+QkQBd9Xernv0H/hRkZaigEcn5OrxQ=="
 
 AUTH_USER_MODEL = 'accounts.User'
+
+# REST_FRAMEWORK 기본 전역 설정 추가
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication', # JWT를 쓸 때
+        # 또는 기본 Token 인증을 쓴다면: 'rest_framework.authentication.TokenAuthentication',
+    ],
+}
