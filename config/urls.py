@@ -31,5 +31,6 @@ urlpatterns = [
     path("api/v1/", include("ingredients.urls")),
     
     # 레시피 API 
-    path('api/v1/recipes/', include('recipes.urls')), 
+    # path('api/v1/recipes/', include('recipes.urls')), 
+    path('api/v1/', include('recipes.urls')),
 ]

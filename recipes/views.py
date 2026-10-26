@@ -17,8 +17,16 @@ class RecipeRecommendationView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    
+
     def post(self, request):
+
+        # 🚨 프론트가 보낸 토큰이 누군지 VS Code 터미널에 찍어보기!
+        print("====================================")
+        print("👤 현재 요청 유저:", request.user)
+        print("🔑 인증 성공 여부:", request.user.is_authenticated)
+        print("====================================")
+
+        
         raw_ingredients = request.data.get('available_ingredients', [])
         
         if not raw_ingredients:
