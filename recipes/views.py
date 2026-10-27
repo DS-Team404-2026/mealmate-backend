@@ -243,11 +243,18 @@ class RecipeStepView(APIView):
     def get(self, request, pk):
         try:
             recipe = Recipe.objects.get(pk=pk)
-            # Recipe 모델에 조리 단계 필드명(instructions 또는 steps)에 맞춰 불러옴
-            steps = getattr(recipe, 'instructions', getattr(recipe, 'steps', '조리 단계 정보가 없습니다.'))
+            
+            # 🚨 수정된 부분: RelatedManager(데이터 묶음)를 
+            # JSON 변환이 가능한 리스트 안의 딕셔너리 형태로 쫙 풀어주기!
+            steps_data = list(recipe.steps.all().values())
+            
             return Response({
                 "recipe_id": recipe.id,
-                "steps": steps
+                "steps": steps_data
             }, status=status.HTTP_200_OK)
+            
         except Recipe.DoesNotExist:
             return Response({"message": "해당 레시피를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+        except AttributeError:
+            # 혹시 모델 필드명이 steps가 아닐 경우를 대비한 안전장치
+            return Response({"message": "조리 단계 데이터 구조를 확인해주세요."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
