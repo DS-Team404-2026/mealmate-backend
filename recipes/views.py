@@ -189,6 +189,24 @@ class UserBookmarkListView(APIView):
 # 3. 레시피 후기/피드백 등록 뷰
 # ---------------------------------------------------------
 class RecipeFeedbackCreateView(APIView):
+    # GET 요청 처리 추가 (후기 목록 조회)
+    def get(self, request):
+        feedbacks = RecipeFeedback.objects.all()  # 모델명은 실제 사용하는 이름으로 확인!
+        feedback_list = []
+        for fb in feedbacks:
+            feedback_list.append({
+                "id": fb.id,
+                "recommendation_id": getattr(fb, 'recommendation_id', None),
+                "like_dislike": getattr(fb, 'like_dislike', None),
+                "difficulty_result": getattr(fb, 'difficulty_result', None),
+                "comment": getattr(fb, 'comment', ''),
+            })
+            
+        return Response({
+            "status": "success",
+            "feedbacks": feedback_list
+        }, status=status.HTTP_200_OK)
+    
     def post(self, request):
         recommendation_id = request.data.get('recommendation_id')
         like_dislike = request.data.get('like_dislike')
@@ -218,7 +236,7 @@ class RecipeFeedbackCreateView(APIView):
 
 
 
-    # ---------------------------------------------------------
+# ---------------------------------------------------------
 # 4. 레시피 상세 조회 뷰 (GET /api/v1/recipes/{id}/)
 # ---------------------------------------------------------
 class RecipeDetailView(APIView):
