@@ -236,25 +236,89 @@ class RecipeDetailView(APIView):
         except Recipe.DoesNotExist:
             return Response({"message": "해당 레시피를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
 
+# # ---------------------------------------------------------
+# # 5. 조리 단계 조회 뷰 (GET /api/v1/recipes/{id}/steps/)
+# # ---------------------------------------------------------
+# class RecipeStepView(APIView):
+#     def get(self, request, pk):
+#         try:
+#             recipe = Recipe.objects.get(pk=pk)
+            
+#             # 🚨 수정된 부분: RelatedManager(데이터 묶음)를 
+#             # JSON 변환이 가능한 리스트 안의 딕셔너리 형태로 쫙 풀어주기!
+#             steps_data = list(recipe.steps.all().values())
+            
+#             return Response({
+#                 "recipe_id": recipe.id,
+#                 "steps": steps_data
+#             }, status=status.HTTP_200_OK)
+            
+#         except Recipe.DoesNotExist:
+#             return Response({"message": "해당 레시피를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+#         except AttributeError:
+#             # 혹시 모델 필드명이 steps가 아닐 경우를 대비한 안전장치
+#             return Response({"message": "조리 단계 데이터 구조를 확인해주세요."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 # ---------------------------------------------------------
-# 5. 조리 단계 조회 뷰 (GET /api/v1/recipes/{id}/steps/)
+# 5. 조리 단계 조회 뷰 (식약처 API 실시간 연동 버전)
 # ---------------------------------------------------------
 class RecipeStepView(APIView):
     def get(self, request, pk):
         try:
             recipe = Recipe.objects.get(pk=pk)
             
-            # 🚨 수정된 부분: RelatedManager(데이터 묶음)를 
-            # JSON 변환이 가능한 리스트 안의 딕셔너리 형태로 쫙 풀어주기!
+        except Recipe.DoesNotExist:
+            return Response({"message": "해당 레시피를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. DB에 이미 조리 단계(steps)가 들어있다면 그걸 그대로 리스트로 반환
+        if hasattr(recipe, 'steps') and recipe.steps.exists():
             steps_data = list(recipe.steps.all().values())
-            
             return Response({
                 "recipe_id": recipe.id,
                 "steps": steps_data
             }, status=status.HTTP_200_OK)
-            
-        except Recipe.DoesNotExist:
-            return Response({"message": "해당 레시피를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
-        except AttributeError:
-            # 혹시 모델 필드명이 steps가 아닐 경우를 대비한 안전장치
-            return Response({"message": "조리 단계 데이터 구조를 확인해주세요."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 2. DB에 없다면, 식약처 API에서 레시피 이름(title)으로 실시간 검색해서 manual 가져오기
+        api_key = os.getenv("FOOD_API_KEY", "a2186034bae948678800")
+        recipe_name = recipe.title
+        
+        # 식약처 오픈API 표준 URL (서비스명에 따라 소폭 다를 수 있으나 기본 구조)
+        # 예시: http://openapi.foodsafetykorea.go.kr/api/{KEY}/{ServiceId}/{DataType}/{StartIdx}/{EndIdx}/RCP_NM={레시피이름}
+        target_url = f"http://openapi.foodsafetykorea.go.kr/api/{api_key}/COOKRCP01/json/1/5/RCP_NM={recipe_name}"
+
+        parsed_steps = []
+        try:
+            res = requests.get(target_url, timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                row_list = data.get('COOKRCP01', {}).get('row', [])
+                
+                if row_list:
+                    recipe_info = row_list[0]
+                    # 식약처 API의 manual 필드들 (MANUAL01, MANUAL02, ...)을 싹 긁어모음
+                    for i in range(1, 21):
+                        key_num = f"{i:02d}" # 01, 02, 03...
+                        manual_text = recipe_info.get(f"MANUAL{key_num}")
+                        manual_img = recipe_info.get(f"MANUAL_IMG{key_num}")
+                        
+                        if manual_text and manual_text.strip():
+                            parsed_steps.append({
+                                "step_number": i,
+                                "instruction": manual_text.strip(),
+                                "image_url": manual_img if manual_img else None
+                            })
+        except Exception as e:
+            print("🚨 식약처 API 실시간 연동 중 에러 발생:", e)
+
+        # 3. 만약 식약처 API에서도 못 찾아왔을 경우의 최후의 안전장치
+        if not parsed_steps:
+            parsed_steps = [{
+                "step_number": 1,
+                "instruction": "제공되는 상세 조리 단계가 없습니다.",
+                "image_url": None
+            }]
+
+        return Response({
+            "recipe_id": recipe.id,
+            "steps": parsed_steps
+        }, status=status.HTTP_200_OK)
