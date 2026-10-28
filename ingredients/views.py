@@ -2,6 +2,9 @@ from datetime import date, timedelta
 
 import cv2
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 from django.db import DatabaseError, transaction
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -155,7 +158,9 @@ class IngredientViewSet(viewsets.ModelViewSet):
 
                     saved_ingredients.append(ingredient.name)
 
-        except DatabaseError:
+        except DatabaseError as error:
+            logger.exception("냉장고 DB 저장 실패: %s", error)
+
             return Response({
                 "status": "error",
                 "message": "냉장고 DB 저장에 실패했습니다.",
