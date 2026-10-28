@@ -2,12 +2,8 @@ from datetime import date, timedelta
 
 import cv2
 import numpy as np
-import logging
 
-logger = logging.getLogger(__name__)
-
-from django.db import DatabaseError, transaction
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import ValidationError
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -99,7 +95,7 @@ class IngredientViewSet(viewsets.ModelViewSet):
         if not serializer.is_valid():
             return Response({
                 "status": "error",
-                "message": "확정할 식재료 목록을 올바르게 입력해주세요.",
+                "message": "확인할 식재료 목록을 올바르게 입력해주세요.",
                 "errors": serializer.errors,
             }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -122,59 +118,32 @@ class IngredientViewSet(viewsets.ModelViewSet):
                 "message": str(error),
             }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-        # 로그인 계정과 기존 users 테이블을 이메일로 매칭한다.
-        # ID를 직접 재사용하면 다른 사람의 냉장고에 저장될 수 있다.
-        legacy_user = resolve_legacy_user(request.user)
+        validated_ingredients = []
 
-        try:
-            with transaction.atomic():
-                saved_ingredients = []
+        for item, normalized_name in zip(
+            confirmed_items,
+            normalized_names,
+        ):
+            ingredient = Ingredients.objects.filter(
+                name=normalized_name
+            ).first()
 
-                for item, normalized_name in zip(
-                    confirmed_items,
-                    normalized_names,
-                ):
-                    ingredient_name = normalized_name[:20]
-
-                    ingredient = Ingredients.objects.filter(
-                        name=ingredient_name
-                    ).first()
-
-                    if ingredient is None:
-                        ingredient = Ingredients.objects.create(
-                            name=ingredient_name,
-                            category=None,
-                            unit=item["unit"],
-                            amount=0,
-                        )
-
-                    UserRefrigerators.objects.create(
-                        user=legacy_user,
-                        ingredient=ingredient,
-                        quantity=item["quantity"],
-                        expired_at=None,
-                        storage_type=None,
-                    )
-
-                    saved_ingredients.append(ingredient.name)
-
-        except DatabaseError as error:
-            logger.exception("냉장고 DB 저장 실패: %s", error)
-
-            return Response({
-                "status": "error",
-                "message": "냉장고 DB 저장에 실패했습니다.",
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            validated_ingredients.append({
+                "ingredient_id": (
+                    ingredient.id if ingredient else None
+                ),
+                "ingredient_name": normalized_name,
+                "quantity": item["quantity"],
+                "unit": item["unit"],
+                "registered": ingredient is not None,
+            })
 
         return Response({
             "status": "success",
-            "message": (
-                "식재료가 표준화되어 냉장고에 "
-                "성공적으로 저장되었습니다."
-            ),
+            "message": "식재료명을 정리했습니다. 내용을 확인해주세요.",
             "data": {
-                "saved_ingredients": saved_ingredients,
-                "normalized_count": len(saved_ingredients),
+                "validated_ingredients": validated_ingredients,
+                "normalized_count": len(validated_ingredients),
             },
         }, status=status.HTTP_200_OK)
 
